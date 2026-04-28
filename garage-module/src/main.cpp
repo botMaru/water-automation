@@ -17,16 +17,13 @@
 // Display definition
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
-// Function prototypes
-int esp_now_peer_setup(uint8_t MAC_addr[6]); // Function to set up ESP-NOW peer devices
-void printMacAddress(uint8_t mac[6]); // Function to print MAC address in human-readable format
-
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
     struct_message packet;
     memcpy(&packet, incomingData, sizeof(packet));
 
     Serial.print("Data prijata od: ");
     Serial.println(packet.sender);
+    
     
     tft.fillRect(0, 40, 128, 20, ST77XX_BLACK); //Clear old text
     tft.setCursor(0, 40);
@@ -54,6 +51,7 @@ void setup() {
     /*----------- ESP-NOW -----------*/
     Serial.println("Initializing ESP-NOW...");
     WiFi.mode(WIFI_STA);
+    WiFi.disconnect();
 
     if (esp_now_init() != ESP_OK) {
         Serial.println("ESP-NOW Init Error");
@@ -76,25 +74,4 @@ void setup() {
 
 void loop() {
     // Tady bude později menu a ovládání čerpadla
-}
-
-int esp_now_peer_setup(uint8_t MAC_addr[6]){
-    esp_now_peer_info_t peerInfo;
-    memset(&peerInfo, 0, sizeof(peerInfo));
-    
-    memcpy(peerInfo.peer_addr, MAC_addr, 6);
-    peerInfo.channel = 0;
-    peerInfo.encrypt = false;
-    if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-        return SYS_ERR_PEER_ADD; // Return an error code if peer setup fails
-    }
-    return SYS_ERR_OK;
-}
-
-void printMacAddress(uint8_t mac[6]) {
-    for (int i = 0; i < 6; i++) {
-        Serial.print(mac[i], HEX);
-        if (i < 5) Serial.print(":");
-    }
-    Serial.println();
 }
