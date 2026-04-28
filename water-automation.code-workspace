@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "garage-module"
+		},
+		{
+			"name": "tank-module",
+			"path": "tank-module"
+		},
+		{
+			"name": "well-module",
+			"path": "well-module"
+		}
+	],
+	"settings": {}
+}
