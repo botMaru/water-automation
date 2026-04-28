@@ -7,6 +7,7 @@
 #include "common.h"
 
 
+
 // TFT display pins
 #define TFT_CS     5
 #define TFT_RST    4 
@@ -16,21 +17,84 @@
 // Display definition
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
+// Function prototypes
+int esp_now_peer_setup(uint8_t MAC_addr[6]); // Function to set up ESP-NOW peer devices
+void printMacAddress(uint8_t mac[6]); // Function to print MAC address in human-readable format
+
+void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
+    struct_message packet;
+    memcpy(&packet, incomingData, sizeof(packet));
+
+    Serial.print("Data prijata od: ");
+    Serial.println(packet.sender);
+    
+    tft.fillRect(0, 40, 128, 20, ST77XX_BLACK); //Clear old text
+    tft.setCursor(0, 40);
+    tft.print("Od: "); tft.println(packet.sender);
+    tft.print("Hodnota: "); tft.println(packet.value);
+}
+
 void setup() {
     Serial.begin(115200);
+
+    /*--------- TFT display ---------*/
     Serial.println("Initializing TFT display...");
 
-    // Display initialization
-    tft.initR(INITR_BLACKTAB); 
+    tft.initR(INITR_BLACKTAB); //Initialize display
     tft.setRotation(0); // 0 = Portrait
-    tft.fillScreen(ST77XX_BLACK);
 
-    // Turn on the TFT backlight
+    //Turn on the backlight
     pinMode(TFT_LED, OUTPUT);
     digitalWrite(TFT_LED, LOW); 
+
+    //Clear the display
+    tft.fillScreen(ST77XX_BLACK);
+    tft.println("Hello World!");
+
+    /*----------- ESP-NOW -----------*/
+    Serial.println("Initializing ESP-NOW...");
+    WiFi.mode(WIFI_STA);
+
+    if (esp_now_init() != ESP_OK) {
+        Serial.println("ESP-NOW Init Error");
+    }
+    esp_now_register_recv_cb(esp_now_recv_cb_t(OnDataRecv));
+
+    uint8_t TANK_MAC_addr[6] = MAC_TANK;
+    if (esp_now_peer_setup(TANK_MAC_addr) != SYS_ERR_OK) {
+        Serial.println("Failed to set up peer device with MAC address:");
+        printMacAddress(TANK_MAC_addr);
+    }
+
+    uint8_t WELL_MAC_addr[6] = MAC_WELL;
+    if (esp_now_peer_setup(WELL_MAC_addr) != SYS_ERR_OK) {
+        Serial.println("Failed to set up peer device with MAC address:");
+        printMacAddress(WELL_MAC_addr);
+    }
 
 }
 
 void loop() {
     // Tady bude později menu a ovládání čerpadla
+}
+
+int esp_now_peer_setup(uint8_t MAC_addr[6]){
+    esp_now_peer_info_t peerInfo;
+    memset(&peerInfo, 0, sizeof(peerInfo));
+    
+    memcpy(peerInfo.peer_addr, MAC_addr, 6);
+    peerInfo.channel = 0;
+    peerInfo.encrypt = false;
+    if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+        return SYS_ERR_PEER_ADD; // Return an error code if peer setup fails
+    }
+    return SYS_ERR_OK;
+}
+
+void printMacAddress(uint8_t mac[6]) {
+    for (int i = 0; i < 6; i++) {
+        Serial.print(mac[i], HEX);
+        if (i < 5) Serial.print(":");
+    }
+    Serial.println();
 }
