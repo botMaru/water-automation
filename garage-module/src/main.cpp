@@ -17,6 +17,11 @@
 // Display definition
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
+float current_water_level = 50; // Variable to store the current water level
+
+//function prototypes
+void draw_water_level(float level);
+
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
     struct_message packet;
     memcpy(&packet, incomingData, sizeof(packet));
@@ -24,7 +29,7 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
     Serial.print("Data prijata od: ");
     Serial.println(packet.sender);
     
-    
+
     tft.fillRect(0, 40, 128, 20, ST77XX_BLACK); //Clear old text
     tft.setCursor(0, 40);
     tft.print("Od: "); tft.println(packet.sender);
@@ -73,5 +78,29 @@ void setup() {
 }
 
 void loop() {
-    // Tady bude později menu a ovládání čerpadla
+    
+    delay(1000); // Update every second
+}
+
+void draw_dashboard_static(){
+    int container_size = 100; //size of the part that gets filled (no borders)
+    int border_thickness = 2;
+    tft.fillRect(0, 0, 128, 128, ST77XX_BLACK);
+    tft.fillRect((128/2)-(container_size/2)-border_thickness, (128/2)-(container_size/2)-border_thickness, 
+        container_size + (border_thickness * 2), container_size + (border_thickness * 2), ST7735_WHITE); // Draw the container
+
+}
+
+void draw_dashboard_dynamic(){
+    draw_water_level(current_water_level);
+}
+
+void draw_water_level(float level) {
+    // Clear the area where the water level is displayed
+    int container_size = 100; //size of the part that gets filled (no borders)
+    int border_thickness = 2;
+    int filledHeight = (int)(level * 0.01 * container_size); // Calculate the filled pixels
+    
+    tft.fillRect((128/2)-(container_size/2), (128/2)+(container_size/2)-filledHeight, 
+        container_size, filledHeight, ST7735_BLUE); // Fill the container based on the water level
 }
