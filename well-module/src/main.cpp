@@ -4,6 +4,9 @@
 #include "common.h"
 
 
+#define PIN_LEVEL_TOP 26
+#define PIN_LEVEL_BOT 25
+
 uint8_t GARAGE_MAC_addr[6] = MAC_GARAGE;
 
 //structure for sending data
@@ -32,11 +35,17 @@ void setup() {
         Serial.println("Failed to set up peer device with MAC address:");
         printMacAddress(GARAGE_MAC_addr);
     }
+    pinMode(25, INPUT_PULLUP);
+    pinMode(26, INPUT_PULLUP);
 }
 
 void loop() {
     strcpy(myData.sender, "Well");
-    myData.value = 125.5;          
+    
+    myData.level_top = digitalRead(PIN_LEVEL_TOP);
+    myData.level_bot = digitalRead(PIN_LEVEL_BOT);
+
+    myData.value = 0;
     myData.msg_id++;             
 
     esp_err_t result = esp_now_send(GARAGE_MAC_addr, (uint8_t *) &myData, sizeof(myData));
@@ -46,6 +55,7 @@ void loop() {
     } else {
         Serial.println("Error sending message");
     }
+    Serial.printf("Sent - Top: %d, Bottom: %d\n", myData.level_top, myData.level_bot);
 
     delay(5000);
 }
