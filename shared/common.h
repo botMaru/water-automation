@@ -22,7 +22,8 @@ enum SystemError {
 typedef struct struct_message {
     char sender[12];
     float value;    
-    bool status;    
+    bool level_top; 
+    bool level_bot;  
     uint32_t msg_id;
 } struct_message;
 
