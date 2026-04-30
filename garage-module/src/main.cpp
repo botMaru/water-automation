@@ -193,7 +193,7 @@ void draw_dashboard_static(){
 
     int well_h = 80;
     int well_w = 20;
-    tft.fillRect(100-border_thickness, 10-border_thickness, well_w, well_h, ST77XX_WHITE); // Draw the well
+    tft.fillRect(100-border_thickness, 10-border_thickness, well_w+(2*border_thickness), well_h+(2*border_thickness), ST77XX_WHITE); // Draw the well
 
     tft.setCursor(5, 100);
     tft.print("Tank: ");
@@ -276,6 +276,7 @@ void draw_well() {
     }
 
     tft.fillRect(100, well_water, well_w, well_bottom-well_water, WATER_COLOR); // Water level in the well
+    tft.fillRect(100, 10, well_w, well_water-10, ST77XX_WHITE); // Clear the well area
 
     tft.fillRect(100, 30, well_w, 10, top_well_sensor ? ST77XX_GREEN : ST77XX_RED); // Upper sensor
     tft.drawRect(100, 30, well_w, 10, ST77XX_BLACK); // Upper sensor border
