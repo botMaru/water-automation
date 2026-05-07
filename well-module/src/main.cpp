@@ -4,8 +4,8 @@
 #include "common.h"
 
 
-#define PIN_LEVEL_TOP 26
-#define PIN_LEVEL_BOT 25
+#define PIN_LEVEL_TOP 25
+#define PIN_LEVEL_BOT 26
 
 uint8_t GARAGE_MAC_addr[6] = MAC_GARAGE;
 
@@ -35,8 +35,8 @@ void setup() {
         Serial.println("Failed to set up peer device with MAC address:");
         printMacAddress(GARAGE_MAC_addr);
     }
-    pinMode(25, INPUT_PULLUP);
-    pinMode(26, INPUT_PULLUP);
+    pinMode(PIN_LEVEL_TOP, INPUT_PULLUP);
+    pinMode(PIN_LEVEL_BOT, INPUT_PULLUP);
 }
 
 void loop() {
