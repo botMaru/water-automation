@@ -1,13 +1,48 @@
 #include <Arduino.h>
 #include <esp_now.h>
 #include <WiFi.h>
+#include <algorithm> // Pro funkci std::sort
 #include "common.h"
 
+// Definice pinů pro UART senzor
+#define RXD2 16
+#define TXD2 17
 
 uint8_t GARAGE_MAC_addr[6] = MAC_GARAGE;
 
 //structure for sending data
 struct_message myData;
+
+// Funkce pro získání jedné stabilní hodnoty (Median Filter ze 5 vzorků)
+int get_filtered_distance() {
+    int measurements[5];
+    int count = 0;
+    unsigned long start_attempt = millis();
+
+    // Pokusíme se nasbírat 5 platných měření během max 1 sekundy
+    while (count < 5 && millis() - start_attempt < 1000) {
+        if (Serial2.available() >= 4) {
+            if (Serial2.read() == 0xFF) {
+                uint8_t h = Serial2.read();
+                uint8_t l = Serial2.read();
+                uint8_t sum = Serial2.read();
+                
+                if (((0xFF + h + l) & 0xFF) == sum) {
+                    measurements[count] = (h << 8) + l;
+                    count++;
+                }
+            }
+        }
+    }
+
+    if (count < 5) return -1; // Pokud senzor neodpovídá nebo jsou data špatná
+
+    // Seřadíme naměřené hodnoty podle velikosti
+    std::sort(measurements, measurements + 5);
+
+    // Vrátíme průměr ze 3 prostředních hodnot (odstřihneme extrémy)
+    return (measurements[1] + measurements[2] + measurements[3]) / 3;
+}
 
 // Callback to check if data was sent successfully to Garage
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
@@ -17,6 +52,8 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 
 void setup() {
     Serial.begin(115200);
+
+    Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
     
     /*----------- ESP-NOW -----------*/
     WiFi.mode(WIFI_STA);
@@ -35,17 +72,27 @@ void setup() {
 }
 
 void loop() {
-    strcpy(myData.sender, "Tank");
-    myData.value = 125.5;          
-    myData.msg_id++;             
+    static unsigned long last_send_time = 0;
+    const unsigned long send_interval = 5000; // Odesílání každých 5 sekund
 
-    esp_err_t result = esp_now_send(GARAGE_MAC_addr, (uint8_t *) &myData, sizeof(myData));
-    
-    if (result == ESP_OK) {
-        Serial.println("Message sent to Garage");
-    } else {
-        Serial.println("Error sending message");
+    if (millis() - last_send_time >= send_interval) {
+        last_send_time = millis();
+        
+        while(Serial2.available()) { Serial2.read(); }
+
+        int distance = get_filtered_distance();
+
+        if (distance > 0) {
+            strcpy(myData.sender, "Tank");
+            myData.value = (float)distance; // Posíláme milimetry jako float
+            myData.msg_id++;
+
+            esp_err_t result = esp_now_send(GARAGE_MAC_addr, (uint8_t *) &myData, sizeof(myData));
+            
+            Serial.printf("Vzdálenost: %d mm | Status: %s\n", 
+                          distance, (result == ESP_OK ? "Odesláno" : "Chyba"));
+        } else {
+            Serial.println("Chyba měření: Senzor nedostupný nebo mimo rozsah.");
+        }
     }
-
-    delay(5000);
 }
