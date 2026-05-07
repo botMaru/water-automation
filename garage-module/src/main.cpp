@@ -23,7 +23,6 @@
 #define ROTARY_ENCODER_STEPS 4    // Většinou 4 kroky na jedno cvaknutí
 
 #define WATER_COLOR    0x6c1f
-#define MAX_WATER_LEVEL 100.0
 
 // Display definition
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
@@ -40,14 +39,18 @@ char scene[2][10] = {"Dashboard", "Settings"};
 int current_scene = 0; // Variable to track the current scene (dashboard, settings, etc.)
 int last_scene = -1; // Variable to track the last scene for detecting changes
 
+const float TANK_EMPTY_MM = 100.0; 
+const float TANK_FULL_MM  = 300.0;
 float current_water_level = 100; // Variable to store the current water level
-float last_water_level = -1; // Variable to store the last water level for change detection
+int current_water_level_percentage = 0; // Variable to store the current water level percentage
+int last_water_level_percentage = -1; // Variable to store the last water level for detecting changes
 float contact_timeout = 10000; // Timeout in milliseconds to consider a device as offline
 float last_contact_tank = -(contact_timeout+1); // Variable to store the last contact time with the tank
 float last_contact_well = -(contact_timeout+1); // Variable to store the last contact time with the well
 
 float last_interaction_time = 0; // Variable to store the last interaction time for display sleep mode
 float display_sleep_timeout = 60000; // Timeout in milliseconds to turn off the display after inactivity
+
 
 bool top_well_sensor = false;
 bool bottom_well_sensor = false;
@@ -64,17 +67,11 @@ void rotary_loop() {
     int32_t delta = rotaryEncoder.encoderChanged();
 
     if (delta != 0) {
-        current_water_level += delta;
-
-        // Kontrola limitů
-        if (current_water_level > MAX_WATER_LEVEL) current_water_level = MAX_WATER_LEVEL;
-        if (current_water_level < 0) current_water_level = 0;
-
-        Serial.printf("Zmena: %d | Hladina: %.1f%%\n", delta, current_water_level);
+        last_interaction_time = millis(); // Update the last interaction time
     }
     
     if (rotaryEncoder.isEncoderButtonClicked()) {
-        Serial.println("Tlacitko!");
+        Serial.println("Button pressed");
         last_interaction_time = millis(); // Update the last interaction time
     }
 }
@@ -89,8 +86,12 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
     Serial.println(packet.value);
     
     if (strcmp(packet.sender, "Tank") == 0) {
-        current_water_level = packet.value;
+        float distance_mm = packet.value;
+        current_water_level = (TANK_EMPTY_MM - distance_mm);
+        current_water_level_percentage = (int)((current_water_level / (TANK_EMPTY_MM - TANK_FULL_MM)) * 100);
         last_contact_tank = millis();
+
+
     } else if (strcmp(packet.sender, "Well") == 0) {
         top_well_sensor = packet.level_top;
         bottom_well_sensor = packet.level_bot;
@@ -202,9 +203,9 @@ void draw_dashboard_static(){
 }
 
 void draw_dashboard_dynamic(){
-    if (current_water_level != last_water_level) {
+    if (current_water_level_percentage != last_water_level_percentage) {
         draw_water_level();
-        last_water_level = current_water_level;
+        last_water_level_percentage = current_water_level_percentage;
     }
 
     tft.setTextSize(1);
@@ -244,11 +245,10 @@ void draw_dashboard_dynamic(){
 
 void draw_water_level() {
     int container_size = 80; //size of the part that gets filled (no borders)
-    int water_level_percentage = (int)(current_water_level / MAX_WATER_LEVEL * 100);
-    if (water_level_percentage > 100) water_level_percentage = 100;
-    if (water_level_percentage < 0) water_level_percentage = 0;
-    int filled_height = (int)(water_level_percentage * 0.01 * container_size); // Calculate the filled pixels
-    
+    if (current_water_level_percentage > 100) current_water_level_percentage = 100;
+    if (current_water_level_percentage < 0) current_water_level_percentage = 0;
+    int filled_height = (int)(current_water_level_percentage * 0.01 * container_size); // Calculate the filled pixels
+
     tft.fillRect(10, 10, container_size, (container_size-filled_height), ST7735_WHITE); // Draw the empty part
     tft.fillRect(10, 10+(container_size-filled_height), container_size, filled_height, WATER_COLOR); // Draw the filled part
     tft.setTextColor(ST77XX_BLACK);
@@ -256,7 +256,7 @@ void draw_water_level() {
     //tft.setFont(&FreeSansBold9pt7b);
 
     char buffer[10];
-    snprintf(buffer, sizeof(buffer), "%d%%", water_level_percentage);
+    snprintf(buffer, sizeof(buffer), "%d%%", current_water_level_percentage);
     draw_centered_text(50, 50, buffer);
     tft.setFont();
 }
@@ -264,19 +264,20 @@ void draw_water_level() {
 void draw_well() {
     int well_h = 80;
     int well_w = 20;
+    int well_top = 10;
     int well_bottom = 90;
-    int well_water;
+    int well_water_y;
     
     if (top_well_sensor) {
-        well_water = 20;
+        well_water_y = 20;
     } else if (bottom_well_sensor) {
-        well_bottom = 50;
+        well_water_y = 50;
     } else {
-        well_water = 80;
+        well_water_y = 80;
     }
 
-    tft.fillRect(100, well_water, well_w, well_bottom-well_water, WATER_COLOR); // Water level in the well
-    tft.fillRect(100, 10, well_w, well_water-10, ST77XX_WHITE); // Clear the well area
+    tft.fillRect(100, well_water_y, well_w, well_bottom-well_water_y, WATER_COLOR); // Water level in the well
+    tft.fillRect(100, 10, well_w, well_water_y-well_top, ST77XX_WHITE); // Clear the well area
 
     tft.fillRect(100, 30, well_w, 10, top_well_sensor ? ST77XX_GREEN : ST77XX_RED); // Upper sensor
     tft.drawRect(100, 30, well_w, 10, ST77XX_BLACK); // Upper sensor border
