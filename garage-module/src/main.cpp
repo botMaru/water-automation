@@ -13,7 +13,7 @@
 // TFT display pins
 #define TFT_CS     5
 #define TFT_RST    4 
-#define TFT_DC     2
+#define TFT_DC     22
 #define TFT_LED    19 
 
 #define ROTARY_ENCODER_A_PIN 25
