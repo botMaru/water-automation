@@ -22,6 +22,9 @@
 #define ROTARY_ENCODER_VCC_PIN -1 // Pokud máš napájeno z 3.3V pinu, dej -1
 #define ROTARY_ENCODER_STEPS 4    // Většinou 4 kroky na jedno cvaknutí
 
+#define MENU_BUTTON 35
+#define ON_OFF_BUTTON 34
+
 #define WATER_COLOR    0x6c1f
 
 // Display definition
@@ -35,20 +38,19 @@ AiEsp32RotaryEncoder rotaryEncoder = AiEsp32RotaryEncoder(
     ROTARY_ENCODER_STEPS
 );
 
-char scene[2][10] = {"Dashboard", "Settings"};
-int current_scene = 0; // Variable to track the current scene (dashboard, settings, etc.)
-int last_scene = -1; // Variable to track the last scene for detecting changes
+volatile int current_scene = 0; // Variable to track the current scene (dashboard, settings, etc.)
+volatile int last_scene = -1; // Variable to track the last scene for detecting changes
 
-const float TANK_EMPTY_MM = 100.0; 
-const float TANK_FULL_MM  = 300.0;
+const float TANK_EMPTY_MM = 900.0; 
+const float TANK_FULL_MM  = 57.0;
 float current_water_level = 100; // Variable to store the current water level
 int current_water_level_percentage = 0; // Variable to store the current water level percentage
 int last_water_level_percentage = -1; // Variable to store the last water level for detecting changes
-float contact_timeout = 10000; // Timeout in milliseconds to consider a device as offline
-float last_contact_tank = -(contact_timeout+1); // Variable to store the last contact time with the tank
-float last_contact_well = -(contact_timeout+1); // Variable to store the last contact time with the well
+float contact_timeout = 13000; // Timeout in milliseconds to consider a device as offline
+unsigned long last_contact_tank = -(contact_timeout+1); // Variable to store the last contact time with the tank
+unsigned long last_contact_well = -(contact_timeout+1); // Variable to store the last contact time with the well
 
-float last_interaction_time = 0; // Variable to store the last interaction time for display sleep mode
+volatile unsigned long last_interaction_time = 0; // Variable to store the last interaction time for display sleep mode
 float display_sleep_timeout = 60000; // Timeout in milliseconds to turn off the display after inactivity
 
 
@@ -58,9 +60,12 @@ bool bottom_well_sensor = false;
 //function prototypes
 void draw_water_level();
 void draw_dashboard_static();
-void draw_dashboard_dynamic();
+void draw_dashboard_dynamic(bool force_update=false);
 void draw_centered_text(int x_center, int y, const char* text);
 void draw_well();
+void draw_settings_static();
+void draw_settings_dymamic(bool force_update=false);
+//hehehe me tadz nenajdes
 
 // Function to handle rotary encoder input
 void rotary_loop() {
@@ -100,8 +105,38 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
 
 }
 
+volatile unsigned long last_interrupt_menu = 0;
+void IRAM_ATTR menu_button_press(){
+    unsigned long interrupt_menu = millis();
+    if (interrupt_menu - last_interrupt_menu > 200) {
+        current_scene = (current_scene + 1) % 2;
+        last_interrupt_menu = interrupt_menu; // Čas aktualizujeme JEN při platném kliku
+    }
+    last_interaction_time = millis();
+}
+
+volatile bool on_off_state = false;
+void IRAM_ATTR on_off_switch_change(){
+    static unsigned long last_interrupt_time = 0;
+        unsigned long interrupt_time = millis();
+
+        if (interrupt_time - last_interrupt_time > 100) { // Debounce 100ms
+            // Přečteme aktuální fyzický stav
+            // Pokud je pin LOW, přepínač je sepnutý (protože spíná proti GND)
+            on_off_state = (digitalRead(ON_OFF_BUTTON) == LOW);
+        }
+        last_interrupt_time = interrupt_time;
+    last_interaction_time = millis();
+}
+
 void setup() {
     Serial.begin(115200);
+
+    /*Button pins*/
+    pinMode(MENU_BUTTON, INPUT);
+    attachInterrupt(MENU_BUTTON, menu_button_press, FALLING);
+    pinMode(ON_OFF_BUTTON, INPUT);
+    attachInterrupt(ON_OFF_BUTTON, on_off_switch_change, CHANGE);
 
     /*--------- TFT display ---------*/
     Serial.println("Initializing TFT display...");
@@ -156,7 +191,7 @@ void loop() {
                 draw_dashboard_static();
                 break;
             case 1: // Settings
-                //TODO: Implement settings screen
+                draw_settings_static();
                 break;
         }
         last_scene = current_scene;
@@ -200,10 +235,11 @@ void draw_dashboard_static(){
     tft.print("Tank: ");
     tft.setCursor(5, 100+10);
     tft.print("Well: ");
+    draw_dashboard_dynamic(true);
 }
 
-void draw_dashboard_dynamic(){
-    if (current_water_level_percentage != last_water_level_percentage) {
+void draw_dashboard_dynamic(bool force_update){
+    if (current_water_level_percentage != last_water_level_percentage || force_update) {
         draw_water_level();
         last_water_level_percentage = current_water_level_percentage;
     }
@@ -214,7 +250,7 @@ void draw_dashboard_dynamic(){
     static int last_tank_status = -1;
     int current_tank_status = ((millis() - last_contact_tank) < contact_timeout);
 
-    if (current_tank_status != last_tank_status) {
+    if (current_tank_status != last_tank_status || force_update) {
         tft.fillRect(35, 100, 41, 8, ST77XX_BLACK); // Clear the area for text
         tft.setTextColor(current_tank_status ? ST77XX_GREEN : ST77XX_RED);
         tft.setCursor(35, 100);
@@ -224,7 +260,7 @@ void draw_dashboard_dynamic(){
 
     static int last_well_status = -1;
     int current_well_status = ((millis() - last_contact_well) < contact_timeout);
-    if (current_well_status != last_well_status) {
+    if (current_well_status != last_well_status || force_update) {
         tft.fillRect(35, 100+10, 41, 8, ST77XX_BLACK); // Clear the area for text
         tft.setTextColor(current_well_status ? ST77XX_GREEN : ST77XX_RED);
         tft.setCursor(35, 100+10);
@@ -235,7 +271,7 @@ void draw_dashboard_dynamic(){
     static int last_top_sensor = -1;
     static int last_bottom_sensor = -1;
 
-    if (top_well_sensor != last_top_sensor || bottom_well_sensor != last_bottom_sensor) {
+    if (top_well_sensor != last_top_sensor || bottom_well_sensor != last_bottom_sensor || force_update) {
         draw_well();
         last_top_sensor = top_well_sensor;
         last_bottom_sensor = bottom_well_sensor;
@@ -245,9 +281,18 @@ void draw_dashboard_dynamic(){
 
 void draw_water_level() {
     int container_size = 80; //size of the part that gets filled (no borders)
-    if (current_water_level_percentage > 100) current_water_level_percentage = 100;
-    if (current_water_level_percentage < 0) current_water_level_percentage = 0;
-    int filled_height = (int)(current_water_level_percentage * 0.01 * container_size); // Calculate the filled pixels
+    //if (current_water_level_percentage > 100) current_water_level_percentage = 100;
+    //if (current_water_level_percentage < 0) current_water_level_percentage = 0;
+    int capped_percentage;
+    if (current_water_level_percentage > 100){
+        capped_percentage = 100;
+    } else if (current_water_level_percentage < 0){
+        capped_percentage = 0;
+    } else {
+        capped_percentage = current_water_level_percentage;
+    }
+    int filled_height = (int)(capped_percentage * 0.01 * container_size); // Calculate the filled pixels
+
 
     tft.fillRect(10, 10, container_size, (container_size-filled_height), ST7735_WHITE); // Draw the empty part
     tft.fillRect(10, 10+(container_size-filled_height), container_size, filled_height, WATER_COLOR); // Draw the filled part
@@ -299,4 +344,12 @@ void draw_centered_text(int x_center, int y_center, const char* text) {
 
     tft.setCursor(x_pos, y_pos);
     tft.print(text);
+}
+
+void draw_settings_static(){
+    tft.setCursor(0,0);
+    tft.fillRect(0,0,128,160, ST77XX_BLACK);
+}
+void draw_settings_dymamic(bool force_update){
+
 }
