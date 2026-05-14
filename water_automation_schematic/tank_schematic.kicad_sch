@@ -1498,7 +1498,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "6f635b5b-1a36-4129-86df-8c2c9b77cd9a")
-		(property "Reference" "J1"
+		(property "Reference" "S1"
 			(at 185.42 72.3899 0)
 			(effects
 				(font
@@ -1507,7 +1507,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "Conn_01x04"
+		(property "Value" "A02YYUW"
 			(at 185.42 74.9299 0)
 			(effects
 				(font
@@ -1558,7 +1558,7 @@
 		(instances
 			(project "tank_schematic"
 				(path "/71dfb74c-d224-46a2-a387-5c24f15186c1"
-					(reference "J1")
+					(reference "S1")
 					(unit 1)
 				)
 			)
