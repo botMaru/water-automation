@@ -1214,7 +1214,17 @@
 		)
 		(uuid "eaff3e6c-0a56-4f23-8bc0-09019dfd3b1b")
 	)
-	(label "VCC"
+	(label "US_GND"
+		(at 171.45 72.39 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "25b7ab5c-c106-43fa-9162-7561e89d72dd")
+	)
+	(label "US_VCC"
 		(at 171.45 69.85 0)
 		(effects
 			(font
@@ -1223,6 +1233,26 @@
 			(justify left bottom)
 		)
 		(uuid "6c575cee-fc30-4ae0-ad6a-4e9ed1b53618")
+	)
+	(label "US_RX"
+		(at 171.45 74.93 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "8b46c79b-f1e3-4e20-a91c-f0afe76d536b")
+	)
+	(label "US_TX"
+		(at 171.45 77.47 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "91bbfc09-8e15-49ab-8376-ea47541edd06")
 	)
 	(symbol
 		(lib_id "power:+3V3")
