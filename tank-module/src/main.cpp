@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <esp_now.h>
 #include <WiFi.h>
+#include <esp_wifi.h> // Přidáno pro pokročilé nastavení Wi-Fi (Long Range a TX výkon)
 #include <algorithm> // Pro funkci std::sort
 #include "common.h"
 
@@ -46,25 +47,48 @@ int get_filtered_distance() {
 
 // Callback to check if data was sent successfully to Garage
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-    Serial.print("Status odeslání: ");
+    Serial.print("Status odeslání z Nádrže: ");
     Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Úspěch" : "Chyba!");
+}
+
+// NOVÉ: Callback pro příjem dat (Repeater funkce)
+// Jakmile Nádrž zachytí zprávu ze Studny, okamžitě ji přepošle do Garáže
+void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
+    Serial.println("Repeater: Přijata data ze Studny, přeposílám do Garáže...");
+    
+    // Přeposlání surového balíčku dat přímo na MAC adresu Garáže
+    esp_err_t result = esp_now_send(GARAGE_MAC_addr, incomingData, len);
+    
+    if (result == ESP_OK) {
+        Serial.println("Repeater: Data úspěšně přeposlána.");
+    } else {
+        Serial.printf("Repeater: Chyba při přeposílání: %d\n", result);
+    }
 }
 
 void setup() {
     Serial.begin(115200);
 
-    Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
+    Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2); // [cite: 50, 174]
     
     /*----------- ESP-NOW -----------*/
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
 
+    // Vynucení POUZE Long Range (LR) módu na Wi-Fi rozhraní pro maximální dosah a spolehlivost
+    esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_LR);
+    
+    // Nastavení maximálního vysílacího výkonu antény (78 = 19.5 dBm)
+    esp_wifi_set_max_tx_power(78);
+
     if (esp_now_init() != ESP_OK) {
         Serial.println("ESP-NOW Init Error");
     }
     esp_now_register_send_cb(OnDataSent);
-
     
+    // NOVÉ: Registrace přijímacího callbacku pro funkci repeateru
+    esp_now_register_recv_cb(esp_now_recv_cb_t(OnDataRecv));
+
     if (esp_now_peer_setup(GARAGE_MAC_addr) != SYS_ERR_OK) {
         Serial.println("Failed to set up peer device with MAC address:");
         printMacAddress(GARAGE_MAC_addr);

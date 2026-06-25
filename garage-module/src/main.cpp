@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <esp_now.h>
 #include <WiFi.h>
+#include <esp_wifi.h> // Přidáno pro pokročilé nastavení Wi-Fi (Long Range a TX výkon)
 #include <Adafruit_GFX.h>    
 #include <Adafruit_ST7735.h> 
 #include <Fonts/FreeSansBold9pt7b.h>
@@ -87,10 +88,11 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
 
     Serial.print("Data prijata od: ");
     Serial.println(packet.sender);
-    Serial.print("Hodnota: ");
-    Serial.println(packet.value);
     
     if (strcmp(packet.sender, "Tank") == 0) {
+        Serial.print("Hodnota (vzdalenost): ");
+        Serial.println(packet.value);
+
         float distance_mm = packet.value;
         current_water_level = (TANK_EMPTY_MM - distance_mm);
         current_water_level_percentage = (int)((current_water_level / (TANK_EMPTY_MM - TANK_FULL_MM)) * 100);
@@ -98,6 +100,12 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
 
 
     } else if (strcmp(packet.sender, "Well") == 0) {
+        // NOVÉ: Kompletní výpis stavu plováků do Serial Monitoru pro debugování
+        Serial.print("Plovaky -> Top (Horni): ");
+        Serial.print(packet.level_top);
+        Serial.print(" | Bot (Spodni): ");
+        Serial.println(packet.level_bot);
+
         top_well_sensor = packet.level_top;
         bottom_well_sensor = packet.level_bot;
         last_contact_well = millis();
@@ -155,6 +163,12 @@ void setup() {
     Serial.println("Initializing ESP-NOW...");
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
+
+    // Aktivace Long Range (LR) módu na Wi-Fi rozhraní
+    esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N | WIFI_PROTOCOL_LR);
+    
+    // Nastavení maximálního vysílacího výkonu antény (78 = 19.5 dBm)
+    esp_wifi_set_max_tx_power(78);
 
     if (esp_now_init() != ESP_OK) {
         Serial.println("ESP-NOW Init Error");
@@ -231,10 +245,14 @@ void draw_dashboard_static(){
     int well_w = 20;
     tft.fillRect(100-border_thickness, 10-border_thickness, well_w+(2*border_thickness), well_h+(2*border_thickness), ST77XX_WHITE); // Draw the well
 
+    // ZMĚNA: Přejmenováno na Nadrz a Studna (bez diakritiky kvůli fontu GFX)
     tft.setCursor(5, 100);
-    tft.print("Tank: ");
+    tft.print("Nadrz: ");
     tft.setCursor(5, 100+10);
-    tft.print("Well: ");
+    tft.print("Studna: ");
+    
+    // Popisky P_Top a P_Bot kompletně vymazány z LCD
+    
     draw_dashboard_dynamic(true);
 }
 
@@ -251,9 +269,10 @@ void draw_dashboard_dynamic(bool force_update){
     int current_tank_status = ((millis() - last_contact_tank) < contact_timeout);
 
     if (current_tank_status != last_tank_status || force_update) {
-        tft.fillRect(35, 100, 41, 8, ST77XX_BLACK); // Clear the area for text
+        // ZMĚNA: Posunuto na X=48 kvůli délce slova "Nadrz: "
+        tft.fillRect(48, 100, 45, 8, ST77XX_BLACK); 
         tft.setTextColor(current_tank_status ? ST77XX_GREEN : ST77XX_RED);
-        tft.setCursor(35, 100);
+        tft.setCursor(48, 100);
         tft.print(current_tank_status ? "Online " : "Offline");
         last_tank_status = current_tank_status;
     }
@@ -261,9 +280,10 @@ void draw_dashboard_dynamic(bool force_update){
     static int last_well_status = -1;
     int current_well_status = ((millis() - last_contact_well) < contact_timeout);
     if (current_well_status != last_well_status || force_update) {
-        tft.fillRect(35, 100+10, 41, 8, ST77XX_BLACK); // Clear the area for text
+        // ZMĚNA: Posunuto na X=54 kvůli délce slova "Studna: "
+        tft.fillRect(54, 100+10, 45, 8, ST77XX_BLACK); 
         tft.setTextColor(current_well_status ? ST77XX_GREEN : ST77XX_RED);
-        tft.setCursor(35, 100+10);
+        tft.setCursor(54, 100+10);
         tft.print(current_well_status ? "Online " : "Offline");
         last_well_status = current_well_status;
     }
@@ -273,6 +293,7 @@ void draw_dashboard_dynamic(bool force_update){
 
     if (top_well_sensor != last_top_sensor || bottom_well_sensor != last_bottom_sensor || force_update) {
         draw_well();
+        // Textové vypisování plováků 1/0 na LCD kompletně odstraněno
         last_top_sensor = top_well_sensor;
         last_bottom_sensor = bottom_well_sensor;
     }
@@ -281,8 +302,6 @@ void draw_dashboard_dynamic(bool force_update){
 
 void draw_water_level() {
     int container_size = 80; //size of the part that gets filled (no borders)
-    //if (current_water_level_percentage > 100) current_water_level_percentage = 100;
-    //if (current_water_level_percentage < 0) current_water_level_percentage = 0;
     int capped_percentage;
     if (current_water_level_percentage > 100){
         capped_percentage = 100;
@@ -298,7 +317,6 @@ void draw_water_level() {
     tft.fillRect(10, 10+(container_size-filled_height), container_size, filled_height, WATER_COLOR); // Draw the filled part
     tft.setTextColor(ST77XX_BLACK);
     tft.setTextSize(3);
-    //tft.setFont(&FreeSansBold9pt7b);
 
     char buffer[10];
     snprintf(buffer, sizeof(buffer), "%d%%", current_water_level_percentage);
@@ -335,10 +353,8 @@ void draw_centered_text(int x_center, int y_center, const char* text) {
     int16_t x1, y1;
     uint16_t w, h;
 
-    // Funkce změří text a uloží šířku do 'w' a výšku do 'h'
     tft.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
 
-    // Výpočet: začátek = střed - (šířka / 2)
     int x_pos = x_center - (w / 2);
     int y_pos = y_center - (h / 2);
 
